@@ -1,0 +1,31 @@
+import Foundation
+
+let apple = NetworkDiagnostics.parse(name: "Apple", output: "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>\n__DNSRESET_PROBE__ 200 0.04 17.0.0.1 \n", exitCode: 0, didTimeOut: false)
+assert(apple.resolved && apple.reachedHTTPS && !apple.unexpectedAppleResponse)
+let portal = NetworkDiagnostics.parse(name: "Apple", output: "Sign in\n__DNSRESET_PROBE__ 200 0.03 192.0.2.1 \n", exitCode: 0, didTimeOut: false)
+assert(portal.unexpectedAppleResponse)
+let redirect = NetworkDiagnostics.parse(name: "Apple", output: "\n__DNSRESET_PROBE__ 302 0.02 192.0.2.1 https://login.example/\n", exitCode: 0, didTimeOut: false)
+assert(redirect.unexpectedAppleResponse)
+let dnsFailure = NetworkDiagnostics.parse(name: "百度", output: "\n__DNSRESET_PROBE__ 000 0.03  \n", exitCode: 6, didTimeOut: false)
+assert(!dnsFailure.resolved && !dnsFailure.reachedHTTPS)
+let connectionFailure = NetworkDiagnostics.parse(name: "百度", output: "\n__DNSRESET_PROBE__ 000 0.03  \n", exitCode: 7, didTimeOut: false)
+assert(connectionFailure.resolved && !connectionFailure.reachedHTTPS)
+let tlsFailure = NetworkDiagnostics.parse(name: "Apple", output: "\n__DNSRESET_PROBE__ 000 0.03 17.0.0.1 \n", exitCode: 60, didTimeOut: false)
+assert(tlsFailure.resolved && !tlsFailure.reachedHTTPS && !tlsFailure.unexpectedAppleResponse)
+let timedOut = NetworkDiagnostics.parse(name: "百度", output: "", exitCode: 9, didTimeOut: true)
+assert(!timedOut.resolved && !timedOut.reachedHTTPS)
+let oneReachable = NetworkDiagnostics.report(interfaces: ["en0"], outcomes: [dnsFailure, apple])
+assert(oneReachable.httpsWorks && oneReachable.dnsWorks && oneReachable.hasNetworkLink)
+let noConnection = NetworkDiagnostics.report(interfaces: [], outcomes: [dnsFailure, timedOut])
+assert(!noConnection.httpsWorks && !noConnection.dnsWorks && !noConnection.hasNetworkLink)
+let login = NetworkDiagnostics.report(interfaces: ["en0"], outcomes: [portal, dnsFailure])
+assert(login.captivePortalSuspected)
+print("Diagnostics fixture checks passed: success, portal, redirect, DNS failure, connection failure, TLS failure, timeout, independent endpoints, missing link.")
+let started = ProcessInfo.processInfo.systemUptime
+let live = NetworkDiagnostics.run()
+let elapsed = ProcessInfo.processInfo.systemUptime - started
+assert(elapsed < 15, "Live diagnostics exceeded 15 seconds")
+print("Live read-only check completed in \(String(format: "%.2f", elapsed)) seconds")
+let encoder = JSONEncoder()
+encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+print(String(data: try encoder.encode(live), encoding: .utf8)!)
