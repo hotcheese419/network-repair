@@ -1,0 +1,11 @@
+# Local build products
+/build/
+/dist/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+*.abi.json
+
+# macOS metadata
+.DS_Store
+._*
